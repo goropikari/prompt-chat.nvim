@@ -6,12 +6,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../..:/workspaces:cached
+      - $HOME/.ollama:/home/vscode/.ollama
     command: sleep infinity
+    environment:
+      OLLAMA_HOST: ollama:11434
 
-  # db:
-  #   image: postgres:latest
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_DB: postgres
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - $HOME/.ollama:/root/.ollama

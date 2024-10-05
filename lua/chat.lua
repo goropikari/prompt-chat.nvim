@@ -2,6 +2,8 @@ local curl = require('plenary.curl')
 local log = require('plenary.log'):new()
 log.level = 'debug'
 
+local ollama_host = os.getenv('OLLAMA_HOST') or 'localhost:11434'
+
 local M = {
   is_windows_hidden = true,
   viewer = {
@@ -13,7 +15,7 @@ local M = {
     bufnr = -1,
     winid = -1,
   },
-  llm_url = 'http://localhost:11434/api/generate',
+  llm_url = 'http://' .. ollama_host .. '/api/generate',
 }
 
 vim.api.nvim_set_hl(0, 'UserHighlight', { fg = '#ffff00', bg = '#000000' })
