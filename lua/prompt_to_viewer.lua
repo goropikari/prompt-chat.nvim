@@ -3,6 +3,7 @@ local M = {
   viewer = {
     bufnr = -1,
     winid = -1,
+    show_interval = 30,
   },
   prompt = {
     bufnr = -1,
@@ -75,16 +76,67 @@ local function is_empty_buffer(bufnr)
   return lines[1] == ''
 end
 
+local function append_lines_one_by_one(bufnr, text_table, interval)
+  local line_idx = 1 -- 現在の処理中の行インデックス
+  local char_idx = 1 -- 現在の行で追加する文字インデックス
+  local total_lines = #text_table -- 配列内の行数
+
+  -- 最初に空の行をバッファに追加
+  if not is_empty_buffer(bufnr) then
+    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { '' })
+  end
+
+  -- 非同期に1文字ずつ追加する
+  local timer = vim.loop.new_timer()
+
+  timer:start(
+    0,
+    interval,
+    vim.schedule_wrap(function()
+      -- 現在の行が配列の行数を超えたら終了
+      if line_idx > total_lines then
+        timer:stop()
+        timer:close()
+        return
+      end
+
+      -- 現在の行の文字列を取得
+      local current_text = text_table[line_idx]
+
+      -- その行が終了したら次の行に移動
+      if char_idx > #current_text then
+        line_idx = line_idx + 1
+        char_idx = 1
+        -- 次の行の追加
+        if line_idx <= total_lines then
+          vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { '' })
+        end
+        return
+      end
+
+      -- 現在の行の内容を取得し、1文字追加して更新
+      local current_line = vim.api.nvim_buf_get_lines(bufnr, -2, -1, false)[1]
+      current_line = current_line .. current_text:sub(char_idx, char_idx)
+
+      -- 1文字を追加
+      vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, { current_line })
+
+      char_idx = char_idx + 1 -- 次の文字に進む
+    end)
+  )
+end
+
 local function send_prompt_to_viewer(prompt_buf, viewer_buf)
   -- prompt の内容を取得
   local data = vim.api.nvim_buf_get_lines(prompt_buf, 0, -1, false)
 
-  -- viewer に prompt の内容を追加
-  local insert_line = -1
-  if is_empty_buffer(viewer_buf) then
-    insert_line = 0
-  end
-  vim.api.nvim_buf_set_lines(viewer_buf, insert_line, -1, false, data)
+  -- -- viewer に prompt の内容を追加
+  -- local insert_line = -1
+  -- if is_empty_buffer(viewer_buf) then
+  --   insert_line = 0
+  -- end
+  -- vim.api.nvim_buf_set_lines(viewer_buf, insert_line, -1, false, data)
+  append_lines_one_by_one(viewer_buf, data, M.viewer.show_interval)
 
   -- prompt の内容をクリア
   vim.api.nvim_buf_set_lines(prompt_buf, 0, -1, false, {})
