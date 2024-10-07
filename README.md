@@ -7,7 +7,7 @@ sample program using neovim floating window and `plenary.curl`
 setup ollama
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3.2
+ollama pull codegemma
 nvim lua/chat.lua
 
 :source

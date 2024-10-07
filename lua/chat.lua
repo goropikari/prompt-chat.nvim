@@ -16,6 +16,8 @@ local M = {
     winid = -1,
   },
   llm_url = 'http://' .. ollama_host .. '/api/generate',
+  -- model = 'qwen2.5-coder',
+  model = 'codegemma',
 }
 
 vim.api.nvim_set_hl(0, 'UserHighlight', { fg = '#ffff00', bg = '#000000' })
@@ -75,7 +77,6 @@ end
 
 local function setup_buffer()
   M.viewer.bufnr = vim.api.nvim_create_buf(false, true)
-  -- vim.api.nvim_buf_set_option(M.viewer.bufnr, 'filetype', 'markdown')
   vim.api.nvim_set_option_value('filetype', 'markdown', { buf = M.viewer.bufnr })
   M.prompt.bufnr = vim.api.nvim_create_buf(false, true)
 end
@@ -129,7 +130,7 @@ local function request_llm(prompt_data, viewer_bufnr)
       end
     end,
     body = vim.fn.json_encode({
-      model = 'llama3.2',
+      model = M.model,
       prompt = table.concat(prompt_data, '\n'),
     }),
   })
