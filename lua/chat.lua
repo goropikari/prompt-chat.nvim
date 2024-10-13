@@ -17,13 +17,14 @@ local M = {
   },
   llm_url = 'http://' .. ollama_host .. '/api/generate',
   -- model = 'qwen2.5-coder',
-  model = 'codegemma',
+  -- model = 'codegemma',
+  model = 'codegemma:7b-instruct-v1.1-q8_0',
 }
 
 vim.api.nvim_set_hl(0, 'UserHighlight', { fg = '#ffff00', bg = '#000000' })
 vim.api.nvim_set_hl(0, 'LocalLLMHighlight', { fg = '#88ff00', bg = '#000000' })
 
-local function show_windows()
+local function show_windows(viewer_bufnr, prompt_bufnr)
   if M.is_windows_hidden then
     -- Floating Windowの設定
     local viewer_width = math.floor(vim.o.columns * 0.7) -- 横幅を画面の70%
@@ -43,7 +44,7 @@ local function show_windows()
     }
 
     -- Floating Windowを作成
-    M.viewer.winid = vim.api.nvim_open_win(M.viewer.bufnr, true, viewer_win_opts)
+    M.viewer.winid = vim.api.nvim_open_win(viewer_bufnr, true, viewer_win_opts)
 
     local prompt_width = viewer_width
     local prompt_height = 3
@@ -61,7 +62,7 @@ local function show_windows()
       style = 'minimal',
     }
 
-    M.prompt.winid = vim.api.nvim_open_win(M.prompt.bufnr, true, prompt_win_opts)
+    M.prompt.winid = vim.api.nvim_open_win(prompt_bufnr, true, prompt_win_opts)
 
     M.is_windows_hidden = false
   end
@@ -100,6 +101,26 @@ local function move_bottom(win_id)
   end
 end
 
+local function handle_stream(err, chunk, viewer_bufnr)
+  if chunk then
+    local res = vim.json.decode(chunk)
+    -- log.debug(res)
+
+    -- メインスレッドで安全にAPIを呼び出すためにvim.scheduleを使用
+    vim.schedule(function()
+      -- バッファの内容を更新
+      local last_line_num = vim.api.nvim_buf_line_count(viewer_bufnr)
+      local last_line_text = vim.api.nvim_buf_get_lines(viewer_bufnr, last_line_num - 1, last_line_num, false)[1]
+      last_line_text = last_line_text .. res.response
+      vim.api.nvim_buf_set_lines(viewer_bufnr, last_line_num - 1, -1, false, vim.split(last_line_text, '\n'))
+      if res.done then
+        vim.api.nvim_buf_set_lines(viewer_bufnr, -1, -1, false, { '', '----', '' })
+      end
+      move_bottom(M.viewer.winid)
+    end)
+  end
+end
+
 local function request_llm(prompt_data, viewer_bufnr)
   vim.api.nvim_buf_set_lines(viewer_bufnr, -1, -1, false, { 'Local LLM:' })
   local last_line_num = vim.api.nvim_buf_line_count(viewer_bufnr)
@@ -109,25 +130,7 @@ local function request_llm(prompt_data, viewer_bufnr)
   curl.post({
     url = M.llm_url,
     stream = function(err, chunk)
-      if chunk then
-        local res = vim.json.decode(chunk)
-        -- log.debug(res)
-
-        vim.uv.timer_start(vim.uv.new_timer(), 0, 0, function()
-          -- メインスレッドで安全にAPIを呼び出すためにvim.scheduleを使用
-          vim.schedule(function()
-            -- バッファの内容を更新
-            local last_line_num = vim.api.nvim_buf_line_count(viewer_bufnr)
-            local last_line_text = vim.api.nvim_buf_get_lines(viewer_bufnr, last_line_num - 1, last_line_num, false)[1]
-            last_line_text = last_line_text .. res.response
-            vim.api.nvim_buf_set_lines(viewer_bufnr, last_line_num - 1, -1, false, vim.split(last_line_text, '\n'))
-            if res.done then
-              vim.api.nvim_buf_set_lines(viewer_bufnr, -1, -1, false, { '', '----', '' })
-            end
-            move_bottom(M.viewer.winid)
-          end)
-        end)
-      end
+      handle_stream(err, chunk, viewer_bufnr)
     end,
     body = vim.fn.json_encode({
       model = M.model,
@@ -167,13 +170,17 @@ local function setup_keymaps(opts)
   vim.api.nvim_set_keymap('n', '<leader>o', '', {
     noremap = true,
     silent = true,
-    callback = show_windows,
+    callback = function()
+      show_windows(M.viewer.bufnr, M.prompt.bufnr)
+    end,
   })
 
   vim.api.nvim_buf_set_keymap(M.prompt.bufnr, 'n', '<Esc>', '', {
     noremap = true,
     silent = true,
-    callback = hide_windows,
+    callback = function()
+      show_windows(M.viewer.bufnr, M.prompt.bufnr)
+    end,
   })
   vim.api.nvim_buf_set_keymap(M.viewer.bufnr, 'n', '<Esc>', '', {
     noremap = true,
@@ -195,4 +202,4 @@ function M.setup(opts)
 end
 
 M.setup()
-show_windows()
+show_windows(M.viewer.bufnr, M.prompt.bufnr)
